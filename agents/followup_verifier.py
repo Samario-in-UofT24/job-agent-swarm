@@ -1,4 +1,4 @@
-"""Resume Customizer — LangGraph Node 4. See AGENT_CONTRACT.md § Node 4."""
+"""Follow-up Email Verifier — LangGraph Node 7. See AGENT_CONTRACT.md § Node 7."""
 
 from __future__ import annotations
 
@@ -9,23 +9,18 @@ from typing import Any, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
-__all__ = ["resume_customizer"]
+__all__ = ["followup_verifier", "MAX_EMAIL_REVISIONS"]
+
+MAX_EMAIL_REVISIONS = 2
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class RewriteItem(BaseModel):
-    original: str = ""
-    rewritten: str = ""
-    why: str = ""
-    evidence_used: list[str] = Field(default_factory=list)
-
-
-class CustomizedResumeModel(BaseModel):
-    rewrites: list[RewriteItem] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+class FollowupVerifierModel(BaseModel):
+    writer_passed: bool
+    writer_feedback: str | None
 
 
 def _repo_root() -> Path:
@@ -93,26 +88,31 @@ def _invoke_structured(
     ) from last_err
 
 
-def resume_customizer(state: dict[str, Any]) -> dict[str, Any]:
-    """Writes customized_resume and increments resume_revision_count."""
-    required = ("raw_resume", "parsed_resume", "parsed_job", "match_result")
+def followup_verifier(state: dict[str, Any]) -> dict[str, Any]:
+    """Writes writer_passed, writer_feedback."""
+    required = (
+        "parsed_job",
+        "parsed_resume",
+        "match_result",
+        "customized_resume",
+        "followup_email",
+    )
     missing = [k for k in required if k not in state]
     if missing:
         raise ValueError(f"missing required state keys: {missing}")
 
-    prev = int(state.get("resume_revision_count") or 0)
     payload = {
-        "raw_resume": state["raw_resume"],
-        "parsed_resume": state["parsed_resume"],
         "parsed_job": state["parsed_job"],
+        "parsed_resume": state["parsed_resume"],
         "match_result": state["match_result"],
-        "review_feedback": state.get("review_feedback"),
-        "resume_revision_count": prev,
+        "customized_resume": state["customized_resume"],
+        "followup_email": state["followup_email"],
+        "email_revision_count": state.get("email_revision_count"),
     }
 
-    system = _load_prompt("customizer_prompt.txt")
-    result = _invoke_structured(CustomizedResumeModel, system, payload)
+    system = _load_prompt("followup_verifier_prompt.txt")
+    result = _invoke_structured(FollowupVerifierModel, system, payload)
     return {
-        "customized_resume": result.model_dump(),
-        "resume_revision_count": prev + 1,
+        "writer_passed": result.writer_passed,
+        "writer_feedback": result.writer_feedback,
     }

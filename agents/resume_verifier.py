@@ -1,4 +1,4 @@
-"""Resume Customizer — LangGraph Node 4. See AGENT_CONTRACT.md § Node 4."""
+"""Resume Integrity Verifier — LangGraph Node 5. See AGENT_CONTRACT.md § Node 5."""
 
 from __future__ import annotations
 
@@ -9,23 +9,18 @@ from typing import Any, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
-__all__ = ["resume_customizer"]
+__all__ = ["resume_verifier", "MAX_RESUME_REVISIONS"]
+
+MAX_RESUME_REVISIONS = 2
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class RewriteItem(BaseModel):
-    original: str = ""
-    rewritten: str = ""
-    why: str = ""
-    evidence_used: list[str] = Field(default_factory=list)
-
-
-class CustomizedResumeModel(BaseModel):
-    rewrites: list[RewriteItem] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+class ResumeVerifierModel(BaseModel):
+    review_passed: bool
+    review_feedback: str | None
 
 
 def _repo_root() -> Path:
@@ -93,26 +88,24 @@ def _invoke_structured(
     ) from last_err
 
 
-def resume_customizer(state: dict[str, Any]) -> dict[str, Any]:
-    """Writes customized_resume and increments resume_revision_count."""
-    required = ("raw_resume", "parsed_resume", "parsed_job", "match_result")
+def resume_verifier(state: dict[str, Any]) -> dict[str, Any]:
+    """Writes review_passed, review_feedback."""
+    required = ("raw_resume", "parsed_resume", "parsed_job", "customized_resume")
     missing = [k for k in required if k not in state]
     if missing:
         raise ValueError(f"missing required state keys: {missing}")
 
-    prev = int(state.get("resume_revision_count") or 0)
     payload = {
         "raw_resume": state["raw_resume"],
         "parsed_resume": state["parsed_resume"],
         "parsed_job": state["parsed_job"],
-        "match_result": state["match_result"],
-        "review_feedback": state.get("review_feedback"),
-        "resume_revision_count": prev,
+        "customized_resume": state["customized_resume"],
+        "resume_revision_count": state.get("resume_revision_count"),
     }
 
-    system = _load_prompt("customizer_prompt.txt")
-    result = _invoke_structured(CustomizedResumeModel, system, payload)
+    system = _load_prompt("resume_verifier_prompt.txt")
+    result = _invoke_structured(ResumeVerifierModel, system, payload)
     return {
-        "customized_resume": result.model_dump(),
-        "resume_revision_count": prev + 1,
+        "review_passed": result.review_passed,
+        "review_feedback": result.review_feedback,
     }
