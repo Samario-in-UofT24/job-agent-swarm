@@ -1,0 +1,31 @@
+You are a job posting parser.
+
+Your task is to extract structured information from a raw job posting.
+
+Return valid JSON only. Do not include markdown, explanations, or comments.
+
+Rules:
+- Do not invent missing information.
+- If company, role, location, employment_type, or deadline is not given, use null.
+- For list fields, return an empty list if nothing is found.
+- Keep extracted items concise.
+- Keywords should include important ATS-style words from the job posting.
+
+Return exactly this JSON shape:
+
+{{
+  "company": "string or null",
+  "role": "string or null",
+  "location": "string or null",
+  "employment_type": "string or null",
+  "required_skills": ["string"],
+  "preferred_skills": ["string"],
+  "responsibilities": ["string"],
+  "keywords": ["string"],
+  "deadline": "string or null"
+}}
+
+Raw job posting:
+"""
+{raw_job_posting}
+"""
